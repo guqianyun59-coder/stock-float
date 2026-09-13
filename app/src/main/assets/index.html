@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0d1117">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>盯盘</title>
+<style>
+:root {
+  --bg: #0d1117; --bg2: #161b22; --bg3: #21262d;
+  --border: #30363d; --fg: #c9d1d9; --fg2: #8b949e;
+  --up: #f85149; --down: #3fb950; --flat: #8b949e;
+  --accent: #58a6ff; --green: #238636;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html,body { height:100%; overflow:hidden; }
+body {
+  font-family: -apple-system, 'SF Pro Text', 'PingFang SC', 'HarmonyOS Sans', 'Microsoft YaHei', sans-serif;
+  background: var(--bg); color: var(--fg);
+  padding-top: var(--safe-top);
+  padding-bottom: var(--safe-bottom);
+  touch-action: pan-y;
+}
+
+/* ─── 顶部栏 ─── */
+.header {
+  position: sticky; top: 0; z-index: 100;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  padding: 12px 16px;
+  display: flex; align-items: center; justify-content: space-between;
+  padding-top: calc(12px + var(--safe-top));
+}
+.header .logo { font-size: 18px; font-weight: 700; color: var(--accent); }
+.header .logo span { font-size: 20px; }
+.header-actions { display: flex; gap: 6px; }
+.header-actions button {
+  background: var(--bg3); border: 1px solid var(--border); color: var(--fg2);
+  width: 36px; height: 36px; border-radius: 10px;
+  font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: all .15s;
+}
+.header-actions button:active { background: var(--border); transform: scale(0.92); }
+
+/* ─── 搜索/添加栏 ─── */
+.search-bar {
+  padding: 8px 16px; background: var(--bg);
+  display: flex; gap: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.search-bar input {
+  flex: 1; background: var(--bg3); border: 1px solid var(--border);
+  color: var(--fg); padding: 10px 14px; border-radius: 10px;
+  font-size: 15px; outline: none; transition: border-color .2s;
+}
+.search-bar input:focus { border-color: var(--accent); }
+.search-bar input::placeholder { color: var(--fg2); }
+.search-bar button {
+  background: var(--green); border: none; color: #fff;
+  padding: 0 18px; border-radius: 10px; font-size: 15px;
+  font-weight: 600; cursor: pointer; white-space: nowrap;
+}
+.search-bar button:active { opacity: .8; }
+
+/* ─── 市场概览 ─── */
+.market-bar {
+  display: flex; gap: 1px; background: var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.market-item {
+  flex: 1; background: var(--bg2); padding: 8px 6px; text-align: center;
+}
+.market-item .mname { font-size: 11px; color: var(--fg2); margin-bottom: 2px; }
+.market-item .mprice { font-size: 14px; font-weight: 700; font-family: 'SF Mono','Consolas',monospace; }
+.market-item .mpct { font-size: 11px; margin-top: 1px; }
+
+/* ─── 股票列表 ─── */
+.stock-list {
+  flex: 1; overflow-y: auto; overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.stock-list::-webkit-scrollbar { display: none; }
+
+.stock-row {
+  display: flex; align-items: center; padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  position: relative; overflow: hidden;
+  transition: background .15s;
+  background: var(--bg);
+}
+.stock-row:active { background: var(--bg3); }
+.stock-row.swiping { transition: none; }
+
+.stock-row .info { flex: 1; min-width: 0; }
+.stock-row .info .name {
+  font-size: 15px; font-weight: 600; color: var(--fg);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.stock-row .info .code {
+  font-size: 12px; color: var(--fg2); font-family: 'SF Mono','Consolas',monospace;
+  margin-top: 2px;
+}
+
+.stock-row .quote { text-align: right; flex-shrink: 0; margin-left: 12px; }
+.stock-row .quote .price {
+  font-size: 18px; font-weight: 700;
+  font-family: 'SF Mono','Consolas',monospace;
+  letter-spacing: -0.5px;
+}
+.stock-row .quote .change {
+  font-size: 12px; margin-top: 2px;
+  font-family: 'SF Mono','Consolas',monospace;
+}
+
+/* 删除按钮（滑动露出） */
+.stock-row .del-zone {
+  position: absolute; right: 0; top: 0; bottom: 0;
+  width: 80px; background: #da3633;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 14px; font-weight: 600;
+  transform: translateX(100%);
+  transition: transform .2s;
+}
+.stock-row.show-del .del-zone { transform: translateX(0); }
+
+/* 涨跌色 */
+.up { color: var(--up); }
+.down { color: var(--down); }
+.flat { color: var(--flat); }
+
+/* 闪烁 */
+@keyframes flash-up { 0%{background:rgba(248,81,73,.12)} 100%{background:transparent} }
+@keyframes flash-down { 0%%{background:rgba(63,185,80,.12)} 100%{background:transparent} }
+.flash-up { animation: flash-up .5s ease; }
+.flash-down { animation: flash-down .5s ease; }
+
+/* ─── 底部状态 ─── */
+.footer {
+  background: var(--bg2); border-top: 1px solid var(--border);
+  padding: 8px 16px; font-size: 11px; color: var(--fg2);
+  display: flex; justify-content: space-between; align-items: center;
+  padding-bottom: calc(8px + var(--safe-bottom));
+}
+.footer .dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+.footer .dot.live { background: var(--down); }
+.footer .dot.err { background: var(--up); }
+
+/* ─── 空状态 ─── */
+.empty {
+  text-align: center; padding: 60px 30px; color: var(--fg2);
+}
+.empty .icon { font-size: 48px; margin-bottom: 12px; }
+.empty .text { font-size: 14px; line-height: 1.6; }
+
+/* ─── 整体布局 ─── */
+.app {
+  display: flex; flex-direction: column; height: 100vh;
+  height: 100dvh;
+}
+
+/* ─── 折叠屏适配 ─── */
+@media (min-width: 600px) {
+  /* 展开状态：双栏布局 */
+  .app { max-width: 480px; margin: 0 auto; }
+  .market-bar { border-radius: 0 0 12px 12px; overflow: hidden; }
+  .stock-row { padding: 14px 20px; }
+  .stock-row .quote .price { font-size: 20px; }
+  .header { padding: 14px 20px; }
+}
+
+@media (min-width: 900px) {
+  /* 超大屏（平板/展开） */
+  .app {
+    max-width: 560px;
+    border-left: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+  }
+}
+
+/* ─── 下拉刷新指示器 ─── */
+.pull-indicator {
+  text-align: center; padding: 0;
+  max-height: 0; overflow: hidden;
+  transition: max-height .3s, padding .3s;
+  color: var(--fg2); font-size: 13px;
+  background: var(--bg);
+}
+.pull-indicator.active {
+  max-height: 50px; padding: 12px;
+}
+.pull-indicator .spinner {
+  display: inline-block; width: 16px; height: 16px;
+  border: 2px solid var(--border); border-top-color: var(--accent);
+  border-radius: 50%; animation: spin .6s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ─── Toast ─── */
+.toast {
+  position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
+  background: var(--bg3); color: var(--fg); padding: 10px 20px;
+  border-radius: 20px; font-size: 13px; z-index: 999;
+  box-shadow: 0 4px 20px rgba(0,0,0,.4);
+  opacity: 0; transition: opacity .3s;
+  pointer-events: none;
+}
+.toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <!-- 顶部 -->
+  <div class="header">
+    <div class="logo"><span>📊</span> 盯盘</div>
+    <div class="header-actions">
+      <button onclick="toggleSearch()" title="添加" id="addBtn">＋</button>
+      <button onclick="refresh()" title="刷新">↻</button>
+    </div>
+  </div>
+
+  <!-- 搜索栏 -->
+  <div class="search-bar" id="searchBar" style="display:none">
+    <input type="text" id="codeInput" placeholder="输入代码：600519 · 000858 · hk00700"
+           inputmode="numeric" enterkeyhint="done"
+           onkeydown="if(event.key==='Enter')addStock()">
+    <button onclick="addStock()">添加</button>
+  </div>
+
+  <!-- 市场概览 -->
+  <div class="market-bar" id="marketBar"></div>
+
+  <!-- 下拉刷新 -->
+  <div class="pull-indicator" id="pullIndicator">
+    <span class="spinner"></span> 刷新中...
+  </div>
+
+  <!-- 股票列表 -->
+  <div class="stock-list" id="stockList"></div>
+
+  <!-- 底部 -->
+  <div class="footer">
+    <span><span class="dot live" id="dot"></span><span id="statusText">等待数据</span></span>
+    <span id="updateTime">--:--:--</span>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ─── 配置 ───
+const STORAGE = 'stock_float_data';
+const REFRESH_MS = 5000;
+const MARKET = [
+  { code: 'sh000001', name: '上证' },
+  { code: 'sz399001', name: '深证' },
+  { code: 'sz399006', name: '创业板' },
+];
+const DEFAULT_STOCKS = [
+  { code: 'sh000001', name: '上证指数' },
+  { code: 'sz399001', name: '深证成指' },
+  { code: 'sz399006', name: '创业板指' },
+];
+
+let stocks = [], quotes = {}, timer = null;
+let searchOpen = false;
+
+// ─── 存储 ───
+function load() {
+  try { const d = localStorage.getItem(STORAGE); stocks = d ? JSON.parse(d) : [...DEFAULT_STOCKS]; }
+  catch { stocks = [...DEFAULT_STOCKS]; }
+}
+function save() { localStorage.setItem(STORAGE, JSON.stringify(stocks)); }
+
+function norm(code) {
+  code = code.trim().toLowerCase().replace(/^(sh|sz|hk)/, '$1');
+  if (/^(sh|sz|hk)\d/.test(code)) return code;
+  if (/^\d+$/.test(code)) {
+    if (/^[659]/.test(code)) return 'sh' + code;
+    if (/^[0123]/.test(code)) return 'sz' + code;
+  }
+  return code;
+}
+
+// ─── 数据源 ───
+async function fetchSina(codes) {
+  const r = await fetch(`https://hq.sinajs.cn/list=${codes.join(',')}`, {
+    headers: { 'Referer': 'https://finance.sina.com.cn' }
+  });
+  const t = await r.text(), result = {};
+  for (const line of t.split('\n')) {
+    const m = line.match(/var hq_str_(\w+)="(.*)";/);
+    if (!m?.[2]) continue;
+    const [code, f] = [m[1], m[2].split(',')];
+    try {
+      if (code.startsWith('sh000') || code.startsWith('sz399')) {
+        result[code] = { name:f[0], price:+f[1], change:+f[2], pct:+f[3] };
+      } else if (code.startsWith('hk')) {
+        const p=+f[6],prev=+f[3],c=+(p-prev).toFixed(3);
+        result[code] = { name:f[1], price:p, change:c, pct:prev?+(c/prev*100).toFixed(2):0 };
+      } else {
+        const p=+f[3],prev=+f[2],c=+(p-prev).toFixed(3);
+        result[code] = { name:f[0], price:p, change:c, pct:prev?+(c/prev*100).toFixed(2):0 };
+      }
+    } catch {}
+  }
+  return result;
+}
+
+async function fetchTencent(codes) {
+  const r = await fetch(`https://qt.gtimg.cn/q=${codes.join(',')}`);
+  const t = await r.text(), result = {};
+  for (const line of t.split('\n')) {
+    const m = line.match(/v_(\w+)="(.*)";/);
+    if (!m?.[2]) continue;
+    const f = m[2].split('~');
+    if (f.length < 35) continue;
+    result[m[1]] = { name:f[1], price:+f[3], change:+f[31], pct:+f[32] };
+  }
+  return result;
+}
+
+async function fetchQuotes(codes) {
+  if (!codes.length) return {};
+  for (const fn of [fetchSina, fetchTencent]) {
+    try { const d = await fn(codes); if (Object.keys(d).length) return d; } catch {}
+  }
+  return {};
+}
+
+// ─── 渲染 ───
+function renderMarket(bar) {
+  bar.innerHTML = MARKET.map(m => {
+    const q = quotes[m.code];
+    if (!q) return `<div class="market-item"><div class="mname">${m.name}</div><div class="mprice flat">--</div><div class="mpct flat">--</div></div>`;
+    const cls = q.change > 0 ? 'up' : q.change < 0 ? 'down' : 'flat';
+    const sign = q.change > 0 ? '+' : '';
+    return `<div class="market-item"><div class="mname">${m.name}</div><div class="mprice ${cls}">${q.price.toFixed(2)}</div><div class="mpct ${cls}">${sign}${q.pct.toFixed(2)}%</div></div>`;
+  }).join('');
+}
+
+function render() {
+  const list = document.getElementById('stockList');
+  if (!stocks.length) {
+    list.innerHTML = '<div class="empty"><div class="icon">📈</div><div class="text">点击右上角 <b>＋</b> 添加自选股<br>支持 A 股 · 港股</div></div>';
+    return;
+  }
+  list.innerHTML = stocks.map((s, i) => {
+    const q = quotes[s.code];
+    const name = q?.name || s.name || s.code;
+    const price = q ? q.price.toFixed(2) : '--';
+    const cls = q ? (q.change > 0 ? 'up' : q.change < 0 ? 'down' : 'flat') : 'flat';
+    const sign = q?.change > 0 ? '+' : '';
+    const chg = q ? `${sign}${q.change.toFixed(2)}  ${sign}${q.pct.toFixed(2)}%` : '--';
+    return `<div class="stock-row" data-code="${s.code}" data-idx="${i}">
+      <div class="info"><div class="name">${name}</div><div class="code">${s.code}</div></div>
+      <div class="quote"><div class="price ${cls}">${price}</div><div class="change ${cls}">${chg}</div></div>
+      <div class="del-zone" onclick="removeStock('${s.code}')">删除</div>
+    </div>`;
+  }).join('');
+
+  // 绑定滑动删除
+  list.querySelectorAll('.stock-row').forEach(row => {
+    let startX = 0, dx = 0, swiping = false;
+    row.addEventListener('touchstart', e => {
+      startX = e.touches[0].clientX; dx = 0; swiping = false;
+      row.classList.remove('show-del');
+    }, { passive: true });
+    row.addEventListener('touchmove', e => {
+      dx = e.touches[0].clientX - startX;
+      if (dx < -10) { swiping = true; row.classList.add('swiping'); }
+      if (swiping) {
+        const x = Math.max(-80, Math.min(0, dx));
+        row.style.transform = `translateX(${x}px)`;
+      }
+    }, { passive: true });
+    row.addEventListener('touchend', () => {
+      row.classList.remove('swiping');
+      if (dx < -50) { row.style.transform = 'translateX(-80px)'; row.classList.add('show-del'); }
+      else { row.style.transform = ''; row.classList.remove('show-del'); }
+    });
+  });
+}
+
+// ─── 操作 ───
+function toggleSearch() {
+  searchOpen = !searchOpen;
+  const bar = document.getElementById('searchBar');
+  const btn = document.getElementById('addBtn');
+  bar.style.display = searchOpen ? 'flex' : 'none';
+  btn.textContent = searchOpen ? '✕' : '＋';
+  if (searchOpen) document.getElementById('codeInput').focus();
+}
+
+function addStock() {
+  const input = document.getElementById('codeInput');
+  const raw = input.value.replace(/，/g, ',');
+  const codes = raw.split(',').map(c => c.trim()).filter(Boolean);
+  const exist = new Set(stocks.map(s => s.code));
+  let added = 0;
+  for (const c of codes) {
+    const nc = norm(c);
+    if (!exist.has(nc)) { stocks.push({ code: nc, name: nc }); exist.add(nc); added++; }
+  }
+  if (added) { save(); render(); refresh(); toast(`已添加 ${added} 只`); }
+  input.value = '';
+  if (added) toggleSearch();
+}
+
+function removeStock(code) {
+  const name = stocks.find(s => s.code === code)?.name || code;
+  stocks = stocks.filter(s => s.code !== code);
+  save(); render(); toast(`已删除 ${name}`);
+}
+
+// ─── 刷新 ───
+async function refresh(showPull = false) {
+  const codes = [...new Set([...stocks.map(s=>s.code), ...MARKET.map(m=>m.code)])];
+  if (!codes.length) return;
+
+  if (showPull) document.getElementById('pullIndicator').classList.add('active');
+  document.getElementById('dot').className = 'dot live';
+
+  try {
+    const data = await fetchQuotes(codes);
+    if (Object.keys(data).length) {
+      quotes = data;
+      for (const s of stocks) if (data[s.code]) s.name = data[s.code].name;
+      save();
+      renderMarket(document.getElementById('marketBar'));
+      render();
+
+      // 闪烁
+      document.querySelectorAll('.stock-row').forEach(row => {
+        const q = quotes[row.dataset.code];
+        if (!q) return;
+        if (q.change > 0) { row.classList.add('flash-up'); setTimeout(()=>row.classList.remove('flash-up'),500); }
+        else if (q.change < 0) { row.classList.add('flash-down'); setTimeout(()=>row.classList.remove('flash-down'),500); }
+      });
+
+      document.getElementById('statusText').textContent = `${stocks.length} 只自选`;
+      document.getElementById('dot').className = 'dot live';
+    }
+  } catch {
+    document.getElementById('statusText').textContent = '网络异常';
+    document.getElementById('dot').className = 'dot err';
+  }
+
+  document.getElementById('updateTime').textContent = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+  document.getElementById('pullIndicator').classList.remove('active');
+}
+
+// ─── 下拉刷新 ───
+(function() {
+  const list = document.getElementById('stockList');
+  let startY = 0, pulling = false;
+  list.addEventListener('touchstart', e => {
+    if (list.scrollTop <= 0) { startY = e.touches[0].clientY; pulling = true; }
+  }, { passive: true });
+  list.addEventListener('touchmove', e => {
+    if (!pulling) return;
+    const dy = e.touches[0].clientY - startY;
+    if (dy > 60 && list.scrollTop <= 0) { pulling = false; refresh(true); }
+  }, { passive: true });
+  list.addEventListener('touchend', () => { pulling = false; }, { passive: true });
+})();
+
+// ─── Toast ───
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2000);
+}
+
+// ─── 注册 SW ───
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+
+// ─── 启动 ───
+load();
+render();
+renderMarket(document.getElementById('marketBar'));
+refresh();
+timer = setInterval(() => refresh(), REFRESH_MS);
+
+// 页面恢复可见时立即刷新
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) refresh();
+});
+</script>
+</body>
+</html>
